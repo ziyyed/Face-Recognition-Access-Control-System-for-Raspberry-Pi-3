@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Project specific
+*.pdsbak
+*.pdsprj.*.workspace
+Project Backups/
+
+# Data (optional - uncomment if you don't want to commit dataset)
+# dataset/
+# trainer.yml
+# labels.json
+
+# Installers
+*.exe
+*.zip
+*.msi
+
+# Documentation (optional - uncomment if you don't want to commit docs)
+# *.md
+# *.txt
+

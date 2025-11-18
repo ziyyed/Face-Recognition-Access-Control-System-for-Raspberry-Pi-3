@@ -1,0 +1,116 @@
+================================================================================
+PROTEUS CIRCUIT PIN CONNECTIONS - Face Recognition Access Control
+================================================================================
+
+RASPBERRY PI 3 (BOARD MODE - Physical Pin Numbers)
+================================================================================
+
+LCD CONNECTIONS (16x2 Parallel LCD):
+------------------------------------
+Raspberry Pi Pin    →    LCD Pin
+------------------------------------
+Physical Pin 10     →    RS (Register Select)
+Physical Pin 36     →    E (Enable)
+Physical Pin 26     →    D4 (Data Bit 4)
+Physical Pin 23     →    D5 (Data Bit 5)
+Physical Pin 32     →    D6 (Data Bit 6)
+Physical Pin 33     →    D7 (Data Bit 7)
+
+LCD Power Connections:
+- LCD VSS → GND
+- LCD VDD → 5V
+- LCD V0  → Potentiometer center (contrast control)
+- LCD A   → 5V (backlight anode)
+- LCD K   → GND (backlight cathode)
+
+MOTOR CONNECTIONS (DC Motor via Driver):
+----------------------------------------
+Raspberry Pi Pin    →    Motor Driver
+----------------------------------------
+Physical Pin 40     →    IN1 (Input 1)
+Physical Pin 46     →    IN2 (Input 2)
+
+Motor Driver Connections:
+- Motor Driver VCC → 5V or 12V (depending on motor)
+- Motor Driver GND → GND
+- Motor Driver OUT1 → Motor Terminal 1
+- Motor Driver OUT2 → Motor Terminal 2
+- Motor Driver Enable → 5V (if using L293D)
+
+SERIAL/UART CONNECTION:
+-----------------------
+Raspberry Pi UART → Virtual Serial Port (VSPE)
+- Configure in Proteus Raspberry Pi properties
+- Use COM1 or COM2 (from VSPE virtual port pair)
+- Baudrate: 9600
+
+================================================================================
+GPIO MAPPING (BOARD vs BCM)
+================================================================================
+
+BOARD Mode (Physical Pin)    BCM Mode (GPIO Number)    Function
+---------------------------------------------------------------------------
+Physical Pin 10              GPIO 22                   LCD RS
+Physical Pin 36              GPIO 23                   LCD E
+Physical Pin 26              GPIO 4                    LCD D4
+Physical Pin 23              GPIO 17                   LCD D5
+Physical Pin 32              GPIO 18                   LCD D6
+Physical Pin 33              GPIO 27                   LCD D7
+Physical Pin 40              GPIO 5                    Motor IN1
+Physical Pin 46              GPIO 6                    Motor IN2
+
+================================================================================
+PROTEUS COMPONENT SETUP
+================================================================================
+
+1. Raspberry Pi 3:
+   - Program File: Proteus_program_face_recognition.py
+   - UART: COM1 (or your VSPE port)
+   - Baudrate: 9600
+
+2. 16x2 LCD:
+   - Type: LM016L (or compatible)
+   - Mode: 4-bit parallel
+
+3. Motor Driver:
+   - Option A: L293D (H-Bridge IC)
+   - Option B: Transistor + Relay
+   - Option C: Simple transistor switch
+
+4. DC Motor:
+   - Any small DC motor (5V-12V)
+   - Add flyback diode across motor terminals
+
+================================================================================
+VSPE (Virtual Serial Port Emulator) SETUP
+================================================================================
+
+1. Install VSPE from SetupVSPE.zip
+
+2. Create Connector:
+   - Device Type: Connector
+   - Port 1: COM1
+   - Port 2: COM2
+   - Click "Add" to create the pair
+
+3. Usage:
+   - Proteus uses: COM1
+   - Python script uses: COM2
+   (Or vice versa - they're connected)
+
+================================================================================
+TESTING CHECKLIST
+================================================================================
+
+[ ] VSPE virtual ports created and connected
+[ ] Proteus circuit built with all components
+[ ] Raspberry Pi program file set to Proteus_program_face_recognition.py
+[ ] UART configured in Proteus (COM port + baudrate)
+[ ] Face recognition model trained (trainer.yml exists)
+[ ] Camera working on PC
+[ ] Python script can connect to COM port
+[ ] LCD displays initialization message in Proteus
+[ ] Motor responds to commands in Proteus
+
+================================================================================
+
