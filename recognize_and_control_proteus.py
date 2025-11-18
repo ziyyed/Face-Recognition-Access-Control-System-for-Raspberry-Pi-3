@@ -16,6 +16,7 @@ import argparse
 import json
 import signal
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,10 +29,12 @@ import serial
 CASCADE_PATH = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
 MODEL_PATH = Path("trainer.yml")
 LABELS_PATH = Path("labels.json")
+PASSWORDS_PATH = Path("passwords.json")
 CONFIDENCE_THRESHOLD = 70.0  # Lower == stricter
 STABILITY_FRAMES = 3  # Require N consecutive predictions before acting
 DOOR_OPEN_SECONDS = 5.0
 UNKNOWN_COOLDOWN_SECONDS = 5.0
+PASSWORD_TIMEOUT_SECONDS = 10.0  # Time to enter password
 # =================================================================
 
 
@@ -65,6 +68,9 @@ class ProteusFaceAccessController:
         self.recognizer.read(str(MODEL_PATH))
         self.labels: Dict[int, str] = self._load_labels(LABELS_PATH)
         
+        # Load passwords
+        self.passwords: Dict[str, str] = self._load_passwords(PASSWORDS_PATH)
+        
         # Proteus serial connection
         try:
             self.serial_conn = serial.Serial(proteus_port, baudrate, timeout=1)
@@ -83,11 +89,30 @@ class ProteusFaceAccessController:
         self._last_unknown_time = 0.0
         self._last_recognized_user: Optional[str] = None
         
+        # Password authentication state
+        self._password_pending: Optional[str] = None  # Username waiting for password
+        self._password_start_time: float = 0.0
+        self._password_lock = threading.Lock()
+        self._password_input_thread: Optional[threading.Thread] = None
+        
     @staticmethod
     def _load_labels(path: Path) -> Dict[int, str]:
         with path.open("r", encoding="utf-8") as f:
             data = json.load(f)
         return {int(k): v for k, v in data.items()}
+    
+    @staticmethod
+    def _load_passwords(path: Path) -> Dict[str, str]:
+        """Load passwords from JSON file."""
+        if not path.exists():
+            print(f"[WARN] Passwords file not found: {path}. Creating default file.")
+            default_passwords = {"hassen": "1234", "zied": "5678"}
+            with path.open("w", encoding="utf-8") as f:
+                json.dump(default_passwords, f, indent=2)
+            return default_passwords
+        
+        with path.open("r", encoding="utf-8") as f:
+            return json.load(f)
     
     def _send_command(self, command: str) -> None:
         """Send command to Proteus via serial."""
@@ -121,7 +146,8 @@ class ProteusFaceAccessController:
             if user_label is not None and user_label != -1:
                 username = self.labels.get(user_label, "Inconnu")
                 if username != self._last_recognized_user:
-                    self._grant_access(username)
+                    # Request password instead of immediately granting access
+                    self._request_password(username)
                     self._last_recognized_user = username
                 recognized = True
                 cv2.putText(
@@ -151,6 +177,13 @@ class ProteusFaceAccessController:
         
         if len(faces) == 0:
             self._reset_stability()
+            # Check password timeout
+            with self._password_lock:
+                if self._password_pending is not None:
+                    elapsed = time.time() - self._password_start_time
+                    if elapsed > PASSWORD_TIMEOUT_SECONDS:
+                        self._password_pending = None
+                        self._send_command("LCD:Systeme Pret|")
             self._last_recognized_user = None
         
         cv2.imshow("Access Control (Proteus)", frame)
@@ -166,9 +199,89 @@ class ProteusFaceAccessController:
         self._streak_label = None
         self._streak_count = 0
     
+    def _request_password(self, username: str) -> None:
+        """Request password for recognized user."""
+        with self._password_lock:
+            if self._password_pending is not None:
+                return  # Already waiting for password
+            
+            self._password_pending = username
+            self._password_start_time = time.time()
+            
+            # Show password prompt on LCD
+            self._send_command(f"LCD:Mot de passe|{username[:12]}")
+            print(f"\n[PASSWORD] Enter password for {username} (or 'q' to cancel):")
+            
+            # Start password input thread
+            if self._password_input_thread is None or not self._password_input_thread.is_alive():
+                self._password_input_thread = threading.Thread(
+                    target=self._password_input_handler,
+                    daemon=True
+                )
+                self._password_input_thread.start()
+    
+    def _password_input_handler(self) -> None:
+        """Handle password input in background thread."""
+        while True:
+            with self._password_lock:
+                if self._password_pending is None:
+                    time.sleep(0.1)
+                    continue
+                
+                username = self._password_pending
+                elapsed = time.time() - self._password_start_time
+                
+                # Check timeout
+                if elapsed > PASSWORD_TIMEOUT_SECONDS:
+                    print(f"[PASSWORD] Timeout for {username}")
+                    self._send_command("LCD:Timeout|Acces refuse")
+                    self._password_pending = None
+                    time.sleep(2)
+                    self._send_command("LCD:Systeme Pret|")
+                    continue
+            
+            # Get password input (this blocks, but in separate thread)
+            try:
+                password = input().strip()
+                
+                with self._password_lock:
+                    if self._password_pending != username:
+                        continue  # User changed, ignore this input
+                    
+                    if password.lower() == 'q':
+                        print(f"[PASSWORD] Cancelled for {username}")
+                        self._send_command("LCD:Annule|")
+                        self._password_pending = None
+                        time.sleep(1)
+                        self._send_command("LCD:Systeme Pret|")
+                        continue
+                    
+                    # Verify password
+                    if self._verify_password(username, password):
+                        self._password_pending = None
+                        self._grant_access(username)
+                    else:
+                        print(f"[PASSWORD] Incorrect password for {username}")
+                        self._send_command("LCD:Mot de passe|Incorrect")
+                        time.sleep(2)
+                        # Reset to allow retry
+                        self._password_start_time = time.time()
+                        self._send_command(f"LCD:Mot de passe|{username[:12]}")
+                        print(f"[PASSWORD] Enter password for {username} (or 'q' to cancel):")
+            except (EOFError, KeyboardInterrupt):
+                break
+            except Exception as e:
+                print(f"[ERROR] Password input error: {e}")
+                time.sleep(0.1)
+    
+    def _verify_password(self, username: str, password: str) -> bool:
+        """Verify password for user."""
+        stored_password = self.passwords.get(username)
+        return stored_password is not None and stored_password == password
+    
     def _grant_access(self, username: str) -> None:
-        """Send access granted command to Proteus."""
-        print(f"[ACCESS] Welcome {username}")
+        """Send access granted command to Proteus (after password verification)."""
+        print(f"[ACCESS] Welcome {username} - Access granted!")
         # Send LCD command: "LCD:Bienvenue|username"
         self._send_command(f"LCD:Bienvenue|{username[:16]}")
         # Send door open command: "DOOR:OPEN:duration"
