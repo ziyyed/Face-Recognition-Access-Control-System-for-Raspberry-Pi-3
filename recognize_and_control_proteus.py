@@ -13,6 +13,7 @@ For real hardware, use recognize_and_control.py instead.
 from __future__ import annotations
 
 import argparse
+import atexit
 import json
 import signal
 import sys
@@ -297,13 +298,35 @@ class ProteusFaceAccessController:
             self._last_unknown_time = now
     
     def cleanup(self) -> None:
-        print("[INFO] Cleaning up")
-        self.cap.release()
+        """Clean up all resources: camera, windows, serial connection, and threads."""
+        print("[INFO] Cleaning up resources...")
+        
+        # Stop password input thread
+        with self._password_lock:
+            self._password_pending = None
+        
+        # Release camera
+        if hasattr(self, 'cap') and self.cap.isOpened():
+            print("[INFO] Releasing camera...")
+            self.cap.release()
+            time.sleep(0.1)  # Give camera time to release
+        
+        # Close all OpenCV windows
         cv2.destroyAllWindows()
+        cv2.waitKey(1)  # Ensure windows are closed
+        
+        # Close serial connection
         if hasattr(self, 'serial_conn') and self.serial_conn.is_open:
-            self._send_command("LCD:Arret|")
-            time.sleep(0.2)
-            self.serial_conn.close()
+            try:
+                self._send_command("LCD:Arret|")
+                time.sleep(0.2)
+            except:
+                pass
+            finally:
+                self.serial_conn.close()
+                print("[INFO] Serial connection closed")
+        
+        print("[INFO] Cleanup complete")
 
 
 def parse_args() -> argparse.Namespace:
@@ -324,6 +347,8 @@ def main() -> int:
             proteus_port=args.proteus_port,
             baudrate=args.baudrate
         )
+        # Register cleanup function to run on exit
+        atexit.register(controller.cleanup)
     except Exception as e:
         print(f"[ERROR] Initialization failed: {e}")
         return 1
