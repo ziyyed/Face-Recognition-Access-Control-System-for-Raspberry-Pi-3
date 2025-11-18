@@ -44,7 +44,7 @@ class Prediction:
 class ProteusFaceAccessController:
     """Face recognition controller that communicates with Proteus via serial."""
     
-    def __init__(self, camera_index: int = 0, proteus_port: str = "COM1", baudrate: int = 9600):
+    def __init__(self, camera_index: int = 0, proteus_port: str = "COM1", baudrate: int = 115200):
         # Camera setup
         self.cap = cv2.VideoCapture(camera_index)
         if not self.cap.isOpened():
@@ -198,7 +198,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--camera-index", type=int, default=0, help="Camera index")
     parser.add_argument("--proteus-port", type=str, default="COM1", 
                        help="Serial port for Proteus (e.g., COM1, COM3)")
-    parser.add_argument("--baudrate", type=int, default=9600, help="Serial baudrate")
+    parser.add_argument("--baudrate", type=int, default=115200, help="Serial baudrate (115200 recommended to prevent data loss)")
     return parser.parse_args()
 
 

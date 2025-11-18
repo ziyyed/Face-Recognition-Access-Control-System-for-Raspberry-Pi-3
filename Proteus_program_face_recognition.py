@@ -66,6 +66,11 @@ GPIO.setup(Motor_2, GPIO.OUT)
 GPIO.output(Motor_1, False)
 GPIO.output(Motor_2, False)
 
+# Motor state machine (non-blocking)
+motor_state = "STOPPED"  # STOPPED, RUNNING
+motor_start_time = 0.0
+motor_duration = 0.0
+
 
 def lcd_init():
     """Initialize the LCD display."""
@@ -147,23 +152,49 @@ def lcd_display(line1, line2=""):
 
 
 def door_open(duration_seconds=5.0):
-    """Open door by activating motor for specified duration."""
-    # Motor forward (open) - rotate both directions then stop
+    """Start door opening (non-blocking). Motor runs in one direction for specified duration."""
+    global motor_state, motor_start_time, motor_duration
+    motor_duration = duration_seconds
+    motor_start_time = time.time()
+    motor_state = "RUNNING"
+    # Start motor (L293D: IN1=HIGH, IN2=LOW)
     GPIO.output(Motor_1, True)
     GPIO.output(Motor_2, False)
-    time.sleep(duration_seconds / 2)  # Half duration forward
-    GPIO.output(Motor_1, False)
-    GPIO.output(Motor_2, True)
-    time.sleep(duration_seconds / 2)  # Half duration reverse
-    # Stop motor
-    GPIO.output(Motor_1, False)
-    GPIO.output(Motor_2, False)
+    print(f"[MOTOR] Door opening for {duration_seconds} seconds")
 
 
 def door_close():
-    """Close door (stop motor)."""
+    """Close door (stop motor immediately)."""
+    global motor_state
+    motor_state = "STOPPED"
     GPIO.output(Motor_1, False)
     GPIO.output(Motor_2, False)
+    print("[MOTOR] Door closed (motor stopped)")
+
+
+def update_motor_state():
+    """Update motor state machine (non-blocking, called from main loop)."""
+    global motor_state, motor_start_time, motor_duration
+    
+    if motor_state == "STOPPED":
+        return
+    
+    if motor_duration <= 0:
+        motor_state = "STOPPED"
+        GPIO.output(Motor_1, False)
+        GPIO.output(Motor_2, False)
+        return
+    
+    current_time = time.time()
+    elapsed = current_time - motor_start_time
+    
+    if motor_state == "RUNNING":
+        if elapsed >= motor_duration:
+            # Stop motor after duration
+            motor_state = "STOPPED"
+            GPIO.output(Motor_1, False)
+            GPIO.output(Motor_2, False)
+            print(f"[MOTOR] Motor stopped after {motor_duration} seconds")
 
 
 def parse_command(data):
@@ -223,25 +254,36 @@ lcd_display("Systeme Pret", "")
 # Main loop: receive commands from serial
 print("[INFO] Proteus face recognition program started. Waiting for commands...")
 pio.uart.print("System ready, waiting for commands...")
+
+# Buffer for incomplete messages
+buffer = ""
+
 while True:
     try:
+        # Update motor state machine (non-blocking)
+        update_motor_state()
+        
         # Receive data from serial (from Python script on PC)
         data = pio.uart.recv()
         if data:
-            # Convert to string if needed (Proteus may return bytes or string)
+            # Convert to string if needed
             if isinstance(data, bytes):
                 try:
-                    data_str = data.decode('utf-8').strip()
+                    data_str = data.decode('utf-8')
                 except:
-                    data_str = str(data).strip()
+                    data_str = str(data)
             else:
-                data_str = str(data).strip()
+                data_str = str(data)
             
-            # Debug: print what we received
-            pio.uart.print(f"Raw data: {repr(data)} -> {data_str}")
+            # Accumulate data in buffer (handle partial messages)
+            buffer += data_str
             
-            if data_str:
-                parse_command(data_str)
+            # Process complete lines (ending with \n)
+            while "\n" in buffer:
+                line, buffer = buffer.split("\n", 1)
+                line = line.strip()
+                if line:
+                    parse_command(line)
     except Exception as e:
         pio.uart.print(f"Error: {e}")
         import traceback
