@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}Employees - Access Control Admin{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12 d-flex justify-content-between align-items-center">
+        <div>
+            <h1><i class="bi bi-people"></i> Employee Management</h1>
+            <p class="text-muted">Manage employees and capture face data</p>
+        </div>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addEmployeeModal">
+            <i class="bi bi-person-plus"></i> Add Employee
+        </button>
+    </div>
+</div>
+
+<!-- Employees Table -->
+<div class="row">
+    <div class="col-md-12">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-list-ul"></i> Employees List
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if employees %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Position</th>
+                                <th>Access Rules</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for employee in employees %}
+                            <tr>
+                                <td><strong>{{ employee.id }}</strong></td>
+                                <td>{{ employee.name }}</td>
+                                <td>{{ employee.position or '-' }}</td>
+                                <td>
+                                    {% if employee.access_rules %}
+                                        <span class="badge bg-info">{{ employee.access_rules|length }} rule(s)</span>
+                                    {% else %}
+                                        <span class="badge bg-warning">No rules</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <small class="text-muted">
+                                        {{ employee.created_at.strftime('%Y-%m-%d') if employee.created_at else '-' }}
+                                    </small>
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <a href="{{ url_for('employee_access_rules', employee_id=employee.id) }}" 
+                                           class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-calendar-check"></i> Access
+                                        </a>
+                                        <form method="POST" 
+                                              action="{{ url_for('retrain_employee', employee_id=employee.id) }}" 
+                                              style="display: inline;" 
+                                              onsubmit="return confirm('Retrain face recognition for {{ employee.name }}? This will capture new images.');">
+                                            <button type="submit" class="btn btn-sm btn-outline-warning">
+                                                <i class="bi bi-arrow-repeat"></i> Retrain
+                                            </button>
+                                        </form>
+                                        <form method="POST" 
+                                              action="{{ url_for('delete_employee', employee_id=employee.id) }}" 
+                                              style="display: inline;" 
+                                              onsubmit="return confirm('Are you sure you want to delete {{ employee.name }}? This will also delete their face data.');">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                <i class="bi bi-trash"></i> Delete
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+                    <p class="text-muted mt-3">No employees registered yet.</p>
+                    <button type="button" class="btn btn-primary mt-2" data-bs-toggle="modal" data-bs-target="#addEmployeeModal">
+                        <i class="bi bi-person-plus"></i> Add First Employee
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Employee Modal -->
+<div class="modal fade" id="addEmployeeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('add_employee') }}">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-person-plus"></i> Add Employee</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> After adding, the system will automatically:
+                        <ul class="mb-0 mt-2">
+                            <li>Capture 50 face images from camera</li>
+                            <li>Train the recognition model</li>
+                        </ul>
+                    </div>
+                    <div class="mb-3">
+                        <label for="add_name" class="form-label">Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="add_name" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="add_position" class="form-label">Position</label>
+                        <input type="text" class="form-control" id="add_position" name="position" 
+                               placeholder="e.g., Software Engineer, Manager">
+                    </div>
+                    <div class="alert alert-warning">
+                        <i class="bi bi-camera-video"></i> <strong>Camera will open</strong> - Make sure the camera is connected and the person is ready.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-camera"></i> Add & Capture Faces
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Show loading state when form is submitted
+document.querySelector('#addEmployeeModal form').addEventListener('submit', function(e) {
+    const submitBtn = this.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processing...';
+});
+</script>
+{% endblock %}

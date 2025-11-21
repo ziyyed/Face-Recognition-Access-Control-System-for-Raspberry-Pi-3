@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}Access Rules - {{ employee.name }}{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('employees') }}">Employees</a></li>
+                <li class="breadcrumb-item active">{{ employee.name }}</li>
+            </ol>
+        </nav>
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1><i class="bi bi-calendar-check"></i> Access Rules</h1>
+                <p class="text-muted">Manage access schedules for <strong>{{ employee.name }}</strong></p>
+            </div>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addRuleModal">
+                <i class="bi bi-plus-circle"></i> Add Rule
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Employee Info Card -->
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">Employee Information</h5>
+                <p class="mb-1"><strong>Name:</strong> {{ employee.name }}</p>
+                {% if employee.position %}
+                <p class="mb-0"><strong>Position:</strong> {{ employee.position }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Access Rules Table -->
+<div class="row">
+    <div class="col-md-12">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-list-ul"></i> Access Schedules
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if rules %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Day</th>
+                                <th>Start Time</th>
+                                <th>End Time</th>
+                                <th>Duration</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for rule in rules %}
+                            <tr>
+                                <td><strong>{{ day_names[rule.day_of_week] }}</strong></td>
+                                <td>{{ rule.start_time.strftime('%H:%M') }}</td>
+                                <td>{{ rule.end_time.strftime('%H:%M') }}</td>
+                                <td>
+                                    {% set start_minutes = rule.start_time.hour * 60 + rule.start_time.minute %}
+                                    {% set end_minutes = rule.end_time.hour * 60 + rule.end_time.minute %}
+                                    {% set duration = end_minutes - start_minutes %}
+                                    {{ (duration // 60) }}h {{ (duration % 60) }}m
+                                </td>
+                                <td>
+                                    <form method="POST" 
+                                          action="{{ url_for('delete_access_rule', rule_id=rule.id) }}" 
+                                          style="display: inline;" 
+                                          onsubmit="return confirm('Delete this access rule?');">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                                            <i class="bi bi-trash"></i> Delete
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-calendar-x" style="font-size: 3rem; color: #ccc;"></i>
+                    <p class="text-muted mt-3">No access rules defined.</p>
+                    <p class="text-muted">Add a rule to allow access during specific times.</p>
+                    <button type="button" class="btn btn-primary mt-2" data-bs-toggle="modal" data-bs-target="#addRuleModal">
+                        <i class="bi bi-plus-circle"></i> Add First Rule
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Rule Modal -->
+<div class="modal fade" id="addRuleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('add_access_rule', employee_id=employee.id) }}">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-calendar-plus"></i> Add Access Rule</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="rule_day" class="form-label">Day of Week <span class="text-danger">*</span></label>
+                        <select class="form-select" id="rule_day" name="day_of_week" required>
+                            {% for i in range(7) %}
+                            <option value="{{ i }}">{{ day_names[i] }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="rule_start" class="form-label">Start Time <span class="text-danger">*</span></label>
+                            <input type="time" class="form-control" id="rule_start" name="start_time" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="rule_end" class="form-label">End Time <span class="text-danger">*</span></label>
+                            <input type="time" class="form-control" id="rule_end" name="end_time" required>
+                        </div>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> Access will be granted only during the specified time window on the selected day.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Rule</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Validate time range
+document.querySelector('#addRuleModal form').addEventListener('submit', function(e) {
+    const start = document.getElementById('rule_start').value;
+    const end = document.getElementById('rule_end').value;
+    
+    if (start >= end) {
+        e.preventDefault();
+        alert('Start time must be before end time.');
+        return false;
+    }
+});
+</script>
+{% endblock %}
+

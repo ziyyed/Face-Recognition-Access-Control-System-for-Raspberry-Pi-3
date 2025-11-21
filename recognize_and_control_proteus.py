@@ -25,6 +25,7 @@ from typing import Dict, Optional
 
 import cv2
 import serial
+import requests
 
 # ======================== Configuration =========================
 CASCADE_PATH = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
@@ -36,6 +37,7 @@ STABILITY_FRAMES = 3  # Require N consecutive predictions before acting
 DOOR_OPEN_SECONDS = 5.0
 UNKNOWN_COOLDOWN_SECONDS = 5.0
 PASSWORD_TIMEOUT_SECONDS = 10.0  # Time to enter password
+FLASK_API_URL = "http://localhost:5000/api/check-access"  # Flask API endpoint
 # =================================================================
 
 
@@ -89,6 +91,8 @@ class ProteusFaceAccessController:
         self._streak_count = 0
         self._last_unknown_time = 0.0
         self._last_recognized_user: Optional[str] = None
+        self._last_logged_face_id: Optional[int] = None  # Track last logged face to avoid duplicate logs
+        self._cached_api_response: Optional[Dict] = None  # Cache last API response for duplicate face detections
         
         # Password authentication state
         self._password_pending: Optional[str] = None  # Username waiting for password
@@ -145,25 +149,65 @@ class ProteusFaceAccessController:
             
             user_label = self._streak_label if self._streak_count >= STABILITY_FRAMES else None
             if user_label is not None and user_label != -1:
+                # Check access via Flask API (face_id = user_label which should be employee.id)
+                api_result = self._log_to_flask_api(user_label)
+                
                 username = self.labels.get(user_label, "Inconnu")
-                if username != self._last_recognized_user:
-                    # Request password instead of immediately granting access
-                    self._request_password(username)
-                    self._last_recognized_user = username
-                recognized = True
-                cv2.putText(
-                    frame,
-                    f"{username} ({prediction.confidence:.1f})",
-                    (x, y - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    (0, 255, 0),
-                    2,
-                )
-            else:
-                if user_label == -1:
-                    self._handle_unknown()
-                    self._last_recognized_user = None
+                
+                # Use Flask API response to determine access
+                if api_result and api_result.get('status') == 'Granted':
+                    # API says access is granted - request password for final verification
+                    if username != self._last_recognized_user:
+                        self._request_password(username)
+                        self._last_recognized_user = username
+                    recognized = True
+                    cv2.putText(
+                        frame,
+                        f"{username} ({prediction.confidence:.1f})",
+                        (x, y - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6,
+                        (0, 255, 0),
+                        2,
+                    )
+                elif api_result and api_result.get('status') == 'Denied':
+                    # API says access is denied - show denial immediately
+                    reason = api_result.get('reason', 'Access denied')
+                    if username != self._last_recognized_user:
+                        print(f"[ACCESS] Denied for {username}: {reason}")
+                        self._send_command(f"LCD:Acces refuse|{reason[:16]}")
+                        self._send_command("DOOR:CLOSE")
+                        self._last_recognized_user = username
+                    cv2.putText(
+                        frame,
+                        f"{username} - Denied",
+                        (x, y - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6,
+                        (0, 0, 255),
+                        2,
+                    )
+                else:
+                    # API call failed - fallback to password system
+                    if username != self._last_recognized_user:
+                        print(f"[WARN] Flask API unavailable, using password fallback for {username}")
+                        self._request_password(username)
+                        self._last_recognized_user = username
+                    recognized = True
+                    cv2.putText(
+                        frame,
+                        f"{username} ({prediction.confidence:.1f})",
+                        (x, y - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6,
+                        (255, 165, 0),  # Orange color for fallback mode
+                        2,
+                    )
+            elif user_label == -1:
+                # Log unknown face to Flask API (face_id = -1)
+                self._log_to_flask_api(-1)
+                self._handle_unknown()
+                self._last_recognized_user = None
                 cv2.putText(
                     frame,
                     "Inconnu",
@@ -173,6 +217,8 @@ class ProteusFaceAccessController:
                     (0, 0, 255),
                     2,
                 )
+            # When user_label is None (stability not reached), don't draw anything
+            # to avoid misleading "Unknown" labels for faces being processed
             
             cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
         
@@ -199,6 +245,50 @@ class ProteusFaceAccessController:
     def _reset_stability(self) -> None:
         self._streak_label = None
         self._streak_count = 0
+        self._last_logged_face_id = None  # Reset when no face detected
+        self._cached_api_response = None  # Clear cache when no face detected
+    
+    def _log_to_flask_api(self, face_id: int) -> Optional[Dict]:
+        """
+        Log access attempt to Flask API.
+        
+        Args:
+            face_id: The face recognition label (employee.id) or -1 for unknown
+        
+        Returns:
+            API response dict (cached if duplicate), None only if API call actually failed
+        """
+        # Return cached response for duplicate face detections (same face_id)
+        if face_id == self._last_logged_face_id and self._cached_api_response is not None:
+            return self._cached_api_response
+        
+        try:
+            response = requests.post(
+                FLASK_API_URL,
+                json={'face_id': face_id},
+                timeout=1.0  # Short timeout to avoid blocking
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                # Cache the response for this face_id
+                self._last_logged_face_id = face_id
+                self._cached_api_response = result
+                return result
+            else:
+                print(f"[WARN] Flask API returned status {response.status_code}")
+                # Don't cache failed responses
+                return None
+                
+        except requests.exceptions.RequestException as e:
+            # API might not be running, that's okay
+            print(f"[WARN] Could not connect to Flask API: {e}")
+            # Don't cache failed responses
+            return None
+        except Exception as e:
+            print(f"[WARN] Error calling Flask API: {e}")
+            # Don't cache failed responses
+            return None
     
     def _request_password(self, username: str) -> None:
         """Request password for recognized user."""
