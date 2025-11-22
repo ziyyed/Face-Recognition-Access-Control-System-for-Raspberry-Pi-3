@@ -31,6 +31,7 @@
                         <thead>
                             <tr>
                                 <th>ID</th>
+                                <th>Photo</th>
                                 <th>Name</th>
                                 <th>Position</th>
                                 <th>Access Rules</th>
@@ -42,13 +43,19 @@
                             {% for employee in employees %}
                             <tr>
                                 <td><strong>{{ employee.id }}</strong></td>
+                                <td>
+                                    <img src="{{ url_for('employee_photo', employee_id=employee.id) }}"
+                                        alt="{{ employee.name }}" class="rounded-circle" width="40" height="40"
+                                        style="object-fit: cover;"
+                                        onerror="this.src='https://via.placeholder.com/40?text=User'">
+                                </td>
                                 <td>{{ employee.name }}</td>
                                 <td>{{ employee.position or '-' }}</td>
                                 <td>
                                     {% if employee.access_rules %}
-                                        <span class="badge bg-info">{{ employee.access_rules|length }} rule(s)</span>
+                                    <span class="badge bg-info">{{ employee.access_rules|length }} rule(s)</span>
                                     {% else %}
-                                        <span class="badge bg-warning">No rules</span>
+                                    <span class="badge bg-warning">No rules</span>
                                     {% endif %}
                                 </td>
                                 <td>
@@ -58,22 +65,28 @@
                                 </td>
                                 <td>
                                     <div class="btn-group" role="group">
-                                        <a href="{{ url_for('employee_access_rules', employee_id=employee.id) }}" 
-                                           class="btn btn-sm btn-outline-primary">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                            data-bs-toggle="modal" data-bs-target="#editEmployeeModal"
+                                            data-id="{{ employee.id }}" data-name="{{ employee.name }}"
+                                            data-position="{{ employee.position or '' }}">
+                                            <i class="bi bi-pencil"></i> Edit
+                                        </button>
+                                        <a href="{{ url_for('employee_access_rules', employee_id=employee.id) }}"
+                                            class="btn btn-sm btn-outline-primary">
                                             <i class="bi bi-calendar-check"></i> Access
                                         </a>
-                                        <form method="POST" 
-                                              action="{{ url_for('retrain_employee', employee_id=employee.id) }}" 
-                                              style="display: inline;" 
-                                              onsubmit="return confirm('Retrain face recognition for {{ employee.name }}? This will capture new images.');">
+                                        <form method="POST"
+                                            action="{{ url_for('retrain_employee', employee_id=employee.id) }}"
+                                            style="display: inline;"
+                                            onsubmit="return confirm('Retrain face recognition for {{ employee.name }}? This will capture new images.');">
                                             <button type="submit" class="btn btn-sm btn-outline-warning">
                                                 <i class="bi bi-arrow-repeat"></i> Retrain
                                             </button>
                                         </form>
-                                        <form method="POST" 
-                                              action="{{ url_for('delete_employee', employee_id=employee.id) }}" 
-                                              style="display: inline;" 
-                                              onsubmit="return confirm('Are you sure you want to delete {{ employee.name }}? This will also delete their face data.');">
+                                        <form method="POST"
+                                            action="{{ url_for('delete_employee', employee_id=employee.id) }}"
+                                            style="display: inline;"
+                                            onsubmit="return confirm('Are you sure you want to delete {{ employee.name }}? This will also delete their face data.');">
                                             <button type="submit" class="btn btn-sm btn-outline-danger">
                                                 <i class="bi bi-trash"></i> Delete
                                             </button>
@@ -89,7 +102,8 @@
                 <div class="text-center py-5">
                     <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
                     <p class="text-muted mt-3">No employees registered yet.</p>
-                    <button type="button" class="btn btn-primary mt-2" data-bs-toggle="modal" data-bs-target="#addEmployeeModal">
+                    <button type="button" class="btn btn-primary mt-2" data-bs-toggle="modal"
+                        data-bs-target="#addEmployeeModal">
                         <i class="bi bi-person-plus"></i> Add First Employee
                     </button>
                 </div>
@@ -122,11 +136,12 @@
                     </div>
                     <div class="mb-3">
                         <label for="add_position" class="form-label">Position</label>
-                        <input type="text" class="form-control" id="add_position" name="position" 
-                               placeholder="e.g., Software Engineer, Manager">
+                        <input type="text" class="form-control" id="add_position" name="position"
+                            placeholder="e.g., Software Engineer, Manager">
                     </div>
                     <div class="alert alert-warning">
-                        <i class="bi bi-camera-video"></i> <strong>Camera will open</strong> - Make sure the camera is connected and the person is ready.
+                        <i class="bi bi-camera-video"></i> <strong>Camera will open</strong> - Make sure the camera is
+                        connected and the person is ready.
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -139,15 +154,63 @@
         </div>
     </div>
 </div>
+
+<!-- Edit Employee Modal -->
+<div class="modal fade" id="editEmployeeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" id="editEmployeeForm">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-pencil"></i> Edit Employee</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="edit_name" class="form-label">Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="edit_name" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_position" class="form-label">Position</label>
+                        <input type="text" class="form-control" id="edit_position" name="position"
+                            placeholder="e.g., Software Engineer, Manager">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save"></i> Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-// Show loading state when form is submitted
-document.querySelector('#addEmployeeModal form').addEventListener('submit', function(e) {
-    const submitBtn = this.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processing...';
-});
+    // Show loading state when form is submitted
+    document.querySelector('#addEmployeeModal form').addEventListener('submit', function (e) {
+        const submitBtn = this.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processing...';
+    });
+
+    // Handle Edit Modal
+    var editEmployeeModal = document.getElementById('editEmployeeModal');
+    editEmployeeModal.addEventListener('show.bs.modal', function (event) {
+        var button = event.relatedTarget;
+        var id = button.getAttribute('data-id');
+        var name = button.getAttribute('data-name');
+        var position = button.getAttribute('data-position');
+
+        var modal = this;
+        modal.querySelector('#edit_name').value = name;
+        modal.querySelector('#edit_position').value = position;
+
+        // Update form action
+        var form = modal.querySelector('#editEmployeeForm');
+        form.action = '/employees/' + id + '/edit';
+    });
 </script>
 {% endblock %}

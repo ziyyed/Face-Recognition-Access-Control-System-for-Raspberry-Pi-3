@@ -1,92 +1,182 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Access Control Admin{% endblock %}</title>
-    
+
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-    
+
     <style>
         .navbar-brand {
             font-weight: 600;
         }
+
         .card-stat {
             border-left: 4px solid #0d6efd;
         }
+
         .table-responsive {
             max-height: 600px;
         }
+
         .badge-access-granted {
             background-color: #198754;
         }
+
         .badge-access-denied {
             background-color: #dc3545;
         }
+
+        :root {
+            --bg-body: #f8f9fa;
+            --bg-card: #ffffff;
+            --text-main: #212529;
+            --text-muted: #6c757d;
+            --border-color: #dee2e6;
+            --table-hover: rgba(0, 0, 0, 0.075);
+        }
+
+        [data-theme="dark"] {
+            --bg-body: #212529;
+            --bg-card: #343a40;
+            --text-main: #f8f9fa;
+            --text-muted: #adb5bd;
+            --border-color: #495057;
+            --table-hover: rgba(255, 255, 255, 0.075);
+        }
+
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .card {
+            background-color: var(--bg-card);
+            border-color: var(--border-color);
+        }
+
+        .table {
+            color: var(--text-main);
+            border-color: var(--border-color);
+        }
+
+        .table-hover>tbody>tr:hover>* {
+            color: var(--text-main);
+            background-color: var(--table-hover);
+        }
+
+        .modal-content {
+            background-color: var(--bg-card);
+            color: var(--text-main);
+            border-color: var(--border-color);
+        }
+
+        .form-control,
+        .form-select {
+            background-color: var(--bg-card);
+            color: var(--text-main);
+            border-color: var(--border-color);
+        }
+
+        .form-control:focus,
+        .form-select:focus {
+            background-color: var(--bg-card);
+            color: var(--text-main);
+        }
     </style>
-    
+
     {% block extra_css %}{% endblock %}
 </head>
+
 <body>
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container-fluid">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
+        <div class="container">
             <a class="navbar-brand" href="{{ url_for('dashboard') }}">
-                <i class="bi bi-shield-check"></i> Access Control Admin
+                <i class="bi bi-shield-lock"></i> Access Control
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
+                <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
-                            <i class="bi bi-speedometer2"></i> Dashboard
-                        </a>
+                        <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'employees' %}active{% endif %}" href="{{ url_for('employees') }}">
-                            <i class="bi bi-people"></i> Employees
-                        </a>
+                        <a class="nav-link" href="{{ url_for('employees') }}">Employees</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'logs' %}active{% endif %}" href="{{ url_for('logs') }}">
-                            <i class="bi bi-clock-history"></i> Logs
-                        </a>
+                        <a class="nav-link" href="{{ url_for('logs') }}">Logs</a>
                     </li>
                 </ul>
+                <button class="btn btn-outline-light btn-sm" id="themeToggle">
+                    <i class="bi bi-moon"></i>
+                </button>
             </div>
         </div>
     </nav>
 
     <!-- Flash Messages -->
-    {% with messages = get_flashed_messages(with_categories=true) %}
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-            <div class="container mt-3">
-                {% for category, message in messages %}
-                    <div class="alert alert-{% if category == 'error' %}danger{% elif category == 'warning' %}warning{% elif category == 'info' %}info{% else %}success{% endif %} alert-dismissible fade show" role="alert">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                {% endfor %}
-            </div>
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
         {% endif %}
-    {% endwith %}
+        {% endwith %}
+    </div>
 
     <!-- Main Content -->
-    <main class="container-fluid mt-4">
+    <main class="container mt-4">
         {% block content %}{% endblock %}
     </main>
 
     <!-- Bootstrap 5 JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
+    <script>
+        // Theme Toggle Logic
+        const themeToggle = document.getElementById('themeToggle');
+        const html = document.documentElement;
+        const icon = themeToggle.querySelector('i');
+
+        // Check local storage
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        html.setAttribute('data-theme', savedTheme);
+        updateIcon(savedTheme);
+
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateIcon(newTheme);
+        });
+
+        function updateIcon(theme) {
+            if (theme === 'dark') {
+                icon.classList.remove('bi-moon');
+                icon.classList.add('bi-sun');
+            } else {
+                icon.classList.remove('bi-sun');
+                icon.classList.add('bi-moon');
+            }
+        }
+    </script>
     {% block extra_js %}{% endblock %}
 </body>
-</html>
 
+</html>

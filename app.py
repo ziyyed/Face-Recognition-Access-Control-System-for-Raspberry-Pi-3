@@ -8,9 +8,12 @@ the Raspberry Pi hardware through service classes.
 
 import os
 import shutil
-from datetime import datetime
+import csv
+import io
+from datetime import datetime, time as dt_time, timedelta
 from pathlib import Path
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_file, make_response, send_from_directory
+from sqlalchemy import func
 from models import db, Employee, AccessRule, AccessLog
 from services import FaceCaptureService, ModelTrainerService, AccessControlService
 
@@ -96,27 +99,11 @@ def dashboard():
     # Get latest 5 access logs
     latest_logs = AccessLog.query.order_by(AccessLog.timestamp.desc()).limit(5).all()
     
-    # Get total employees (with auto-fix for missing column)
+    # Get total employees
     try:
         total_employees = Employee.query.count()
-    except Exception as e:
-        if 'no such column: employees.position' in str(e) or 'position' in str(e):
-            print("Auto-fixing database: Adding missing 'position' column...")
-            # Direct SQL fix
-            from sqlalchemy import text
-            try:
-                db.session.execute(text("ALTER TABLE employees ADD COLUMN position VARCHAR(100)"))
-                db.session.commit()
-                print("✓ Added 'position' column")
-            except Exception as sql_err:
-                # Column might already exist, or other error
-                if 'duplicate column' not in str(sql_err).lower():
-                    print(f"Migration note: {sql_err}")
-                db.session.rollback()
-            # Retry the query
-            total_employees = Employee.query.count()
-        else:
-            raise
+    except Exception:
+        total_employees = 0
     
     # Check if model exists
     model_exists = model_trainer_service.model_exists()
@@ -125,12 +112,87 @@ def dashboard():
     today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     total_today = AccessLog.query.filter(AccessLog.timestamp >= today_start).count()
     
+    # Chart Data: Access attempts for last 7 days
+    dates = []
+    counts = []
+    for i in range(6, -1, -1):
+        date = datetime.now().date() - timedelta(days=i)
+        start = datetime.combine(date, dt_time.min)
+        end = datetime.combine(date, dt_time.max)
+        count = AccessLog.query.filter(AccessLog.timestamp >= start, AccessLog.timestamp <= end).count()
+        dates.append(date.strftime('%Y-%m-%d'))
+        counts.append(count)
+    
     return render_template('dashboard.html',
                          latest_logs=latest_logs,
                          total_employees=total_employees,
                          total_today=total_today,
                          model_exists=model_exists,
-                         day_names=DAY_NAMES)
+                         day_names=DAY_NAMES,
+                         chart_dates=dates,
+                         chart_counts=counts)
+
+
+@app.route('/logs/export')
+def export_logs():
+    """Export logs to CSV."""
+    # Get filters from query params
+    date_str = request.args.get('date')
+    employee_id = request.args.get('employee_id', type=int)
+    
+    query = AccessLog.query
+    
+    if date_str:
+        try:
+            filter_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            start_of_day = datetime.combine(filter_date, dt_time.min)
+            end_of_day = datetime.combine(filter_date, dt_time.max)
+            query = query.filter(AccessLog.timestamp >= start_of_day, AccessLog.timestamp <= end_of_day)
+        except ValueError:
+            pass
+            
+    if employee_id:
+        query = query.filter(AccessLog.employee_id == employee_id)
+        
+    logs = query.order_by(AccessLog.timestamp.desc()).all()
+    
+    # Create CSV
+    si = io.StringIO()
+    cw = csv.writer(si)
+    cw.writerow(['ID', 'Timestamp', 'Employee ID', 'Employee Name', 'Position', 'Status'])
+    
+    for log in logs:
+        emp_name = log.employee.name if log.employee else 'Unknown'
+        emp_pos = log.employee.position if log.employee and log.employee.position else '-'
+        cw.writerow([
+            log.id,
+            log.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+            log.employee_id or '-',
+            emp_name,
+            emp_pos,
+            log.status
+        ])
+        
+    output = make_response(si.getvalue())
+    output.headers["Content-Disposition"] = "attachment; filename=access_logs.csv"
+    output.headers["Content-type"] = "text/csv"
+    return output
+
+
+@app.route('/employee/<int:employee_id>/photo')
+def employee_photo(employee_id):
+    """Serve the first available photo for an employee."""
+    user_dir = dataset_dir / f"User.{employee_id}"
+    if user_dir.exists():
+        # Find first jpg
+        photos = list(user_dir.glob("*.jpg"))
+        if photos:
+            return send_from_directory(user_dir, photos[0].name)
+    
+    # Return a placeholder or 404
+    # For now, let's return a simple 404 if no photo, 
+    # the frontend can handle the broken image or we can serve a static placeholder
+    return "No photo", 404
 
 
 @app.route('/employees')
@@ -386,17 +448,69 @@ def delete_access_rule(rule_id):
     return redirect(url_for('employee_access_rules', employee_id=employee_id))
 
 
+@app.route('/employees/<int:employee_id>/edit', methods=['POST'])
+def edit_employee(employee_id):
+    """Edit an employee's details."""
+    try:
+        employee = Employee.query.get_or_404(employee_id)
+        name = request.form.get('name', '').strip()
+        position = request.form.get('position', '').strip()
+        
+        if not name:
+            flash('Name is required.', 'error')
+            return redirect(url_for('employees'))
+            
+        employee.name = name
+        employee.position = position if position else None
+        
+        db.session.commit()
+        flash(f'Employee details updated successfully.', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating employee: {str(e)}', 'error')
+    
+    return redirect(url_for('employees'))
+
+
 @app.route('/logs')
 def logs():
-    """View all attendance logs."""
+    """View all attendance logs with filtering."""
     page = request.args.get('page', 1, type=int)
     per_page = 50
     
-    logs = AccessLog.query.order_by(AccessLog.timestamp.desc()).paginate(
+    # Filters
+    date_str = request.args.get('date')
+    employee_id = request.args.get('employee_id', type=int)
+    
+    query = AccessLog.query
+    
+    if date_str:
+        try:
+            filter_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            # Filter by day (start of day to end of day)
+            start_of_day = datetime.combine(filter_date, dt_time.min)
+            end_of_day = datetime.combine(filter_date, dt_time.max)
+            query = query.filter(AccessLog.timestamp >= start_of_day, AccessLog.timestamp <= end_of_day)
+        except ValueError:
+            pass
+            
+    if employee_id:
+        query = query.filter(AccessLog.employee_id == employee_id)
+    
+    logs = query.order_by(AccessLog.timestamp.desc()).paginate(
         page=page, per_page=per_page, error_out=False
     )
     
-    return render_template('logs.html', logs=logs, day_names=DAY_NAMES)
+    # Get all employees for the filter dropdown
+    employees = Employee.query.order_by(Employee.name).all()
+    
+    return render_template('logs.html', 
+                         logs=logs, 
+                         day_names=DAY_NAMES,
+                         employees=employees,
+                         current_date=date_str,
+                         current_employee=employee_id)
 
 
 @app.route('/api/check-access', methods=['POST'])

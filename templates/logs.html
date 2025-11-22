@@ -14,13 +14,49 @@
 <div class="row">
     <div class="col-md-12">
         <div class="card shadow-sm">
-            <div class="card-header bg-primary text-white">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">
                     <i class="bi bi-list-ul"></i> Access Logs
                     <span class="badge bg-light text-dark ms-2">{{ logs.total }} total</span>
                 </h5>
             </div>
             <div class="card-body">
+                <!-- Filter Form -->
+                <form method="GET" action="{{ url_for('logs') }}" class="row g-3 mb-4 align-items-end">
+                    <div class="col-md-3">
+                        <label for="date" class="form-label">Date</label>
+                        <input type="date" class="form-control" id="date" name="date" value="{{ current_date or '' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="employee_id" class="form-label">Employee</label>
+                        <select class="form-select" id="employee_id" name="employee_id">
+                            <option value="">All Employees</option>
+                            {% for emp in employees %}
+                            <option value="{{ emp.id }}" {% if current_employee==emp.id %}selected{% endif %}>
+                                {{ emp.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-filter"></i> Filter
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="d-grid gap-2">
+                            <a href="{{ url_for('logs') }}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle"></i> Clear
+                            </a>
+                            <a href="{{ url_for('export_logs', date=current_date, employee_id=current_employee) }}"
+                                class="btn btn-success">
+                                <i class="bi bi-file-earmark-spreadsheet"></i> Export CSV
+                            </a>
+                        </div>
+                    </div>
+                </form>
                 {% if logs.items %}
                 <div class="table-responsive">
                     <table class="table table-hover">
@@ -43,27 +79,27 @@
                                 </td>
                                 <td>
                                     {% if log.employee %}
-                                        <strong>{{ log.employee.name }}</strong>
+                                    <strong>{{ log.employee.name }}</strong>
                                     {% else %}
-                                        <span class="text-muted">Unknown</span>
+                                    <span class="text-muted">Unknown</span>
                                     {% endif %}
                                 </td>
                                 <td>
                                     {% if log.employee and log.employee.position %}
-                                        {{ log.employee.position }}
+                                    {{ log.employee.position }}
                                     {% else %}
-                                        <span class="text-muted">-</span>
+                                    <span class="text-muted">-</span>
                                     {% endif %}
                                 </td>
                                 <td>
                                     {% if log.status == 'Granted' %}
-                                        <span class="badge bg-success">
-                                            <i class="bi bi-check-circle"></i> Granted
-                                        </span>
+                                    <span class="badge bg-success">
+                                        <i class="bi bi-check-circle"></i> Granted
+                                    </span>
                                     {% else %}
-                                        <span class="badge bg-danger">
-                                            <i class="bi bi-x-circle"></i> Denied
-                                        </span>
+                                    <span class="badge bg-danger">
+                                        <i class="bi bi-x-circle"></i> Denied
+                                    </span>
                                     {% endif %}
                                 </td>
                             </tr>
@@ -71,7 +107,7 @@
                         </tbody>
                     </table>
                 </div>
-                
+
                 <!-- Pagination -->
                 {% if logs.pages > 1 %}
                 <nav aria-label="Logs pagination">
@@ -85,25 +121,26 @@
                             <span class="page-link">Previous</span>
                         </li>
                         {% endif %}
-                        
-                        {% for page_num in logs.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
-                            {% if page_num %}
-                                {% if page_num == logs.page %}
-                                <li class="page-item active">
-                                    <span class="page-link">{{ page_num }}</span>
-                                </li>
-                                {% else %}
-                                <li class="page-item">
-                                    <a class="page-link" href="{{ url_for('logs', page=page_num) }}">{{ page_num }}</a>
-                                </li>
-                                {% endif %}
-                            {% else %}
-                                <li class="page-item disabled">
-                                    <span class="page-link">...</span>
-                                </li>
-                            {% endif %}
+
+                        {% for page_num in logs.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2)
+                        %}
+                        {% if page_num %}
+                        {% if page_num == logs.page %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                        {% else %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('logs', page=page_num) }}">{{ page_num }}</a>
+                        </li>
+                        {% endif %}
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link">...</span>
+                        </li>
+                        {% endif %}
                         {% endfor %}
-                        
+
                         {% if logs.has_next %}
                         <li class="page-item">
                             <a class="page-link" href="{{ url_for('logs', page=logs.next_num) }}">Next</a>
@@ -117,12 +154,12 @@
                 </nav>
                 <div class="text-center mt-2">
                     <small class="text-muted">
-                        Showing page {{ logs.page }} of {{ logs.pages }} 
+                        Showing page {{ logs.page }} of {{ logs.pages }}
                         ({{ logs.per_page }} entries per page)
                     </small>
                 </div>
                 {% endif %}
-                
+
                 {% else %}
                 <div class="text-center py-5">
                     <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
