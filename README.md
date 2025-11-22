@@ -13,10 +13,14 @@ A comprehensive Raspberry Pi 3-based face recognition access control system with
 - **Proteus Simulation**: Full hardware simulation support via Proteus VSM
 
 ### Flask Admin Dashboard
-- **Web Interface**: Complete Bootstrap 5 admin dashboard
+- **Web Interface**: Complete Bootstrap 5 admin dashboard with modern UI
 - **Employee Management**: Add, edit, delete employees with automatic face capture
+- **Employee Photos**: Display employee photos in the employee list with automatic fallback
 - **Access Schedule Management**: Define time-based access rules per employee
 - **Attendance Logs**: View all access attempts with pagination and filtering
+- **CSV Export**: Export access logs to CSV format with customizable date and employee filters
+- **Visual Analytics**: Interactive Chart.js charts showing access trends over the last 7 days
+- **Dark Mode**: Toggle between light and dark themes with persistent preferences
 - **Real-time Integration**: Face recognition system automatically logs to dashboard
 - **Service Layer Architecture**: Clean separation of concerns with service classes
 
@@ -54,6 +58,40 @@ A comprehensive Raspberry Pi 3-based face recognition access control system with
 └─────────────────────────────────────────────────────────┘
 ```
 
+## 🖥️ Dashboard Features Showcase
+
+### Modern UI Components
+- **Statistics Cards**: At-a-glance view of total employees, entries today, system status, and recent logs
+- **Bootstrap 5 Design**: Responsive, mobile-friendly interface with modern styling
+- **Icon Integration**: Bootstrap Icons throughout for better visual communication
+- **Professional Layout**: Clean, organized interface suitable for production environments
+
+### Key Functionality
+1. **Real-time Dashboard**: 
+   - Live statistics and recent access logs
+   - System status indicator (model trained/not trained)
+   - Quick action buttons for common tasks
+
+2. **Employee Management**:
+   - Photo display with automatic fallback
+   - Quick edit, retrain, and delete actions
+   - Visual access rules indicators
+   - One-click face data capture and training
+
+3. **Access Logs**:
+   - Paginated log views with filtering
+   - Date and employee-based filtering
+   - CSV export with applied filters
+   - Clean, searchable interface
+
+4. **Analytics Dashboard**:
+   - 7-day access trend visualization
+   - Interactive Chart.js bar charts
+   - Color-coded status indicators
+   - Responsive chart sizing
+
+
+
 ## 📋 Hardware Requirements
 
 - Raspberry Pi 3
@@ -71,6 +109,7 @@ A comprehensive Raspberry Pi 3-based face recognition access control system with
 - RPi.GPIO (for real hardware)
 - pyserial (for Proteus communication)
 - requests (for API integration)
+- Chart.js (CDN - for dashboard analytics)
 
 ## 🚀 Installation
 
@@ -147,10 +186,37 @@ python recognize_and_control_proteus.py --proteus-port COM2
 ### Web Dashboard Method (Recommended)
 
 1. **Start Flask Dashboard**: `python app.py`
-2. **Add Employees**: Use the web interface to add employees (automatic face capture)
+2. **Add Employees**: Use the web interface to add employees (automatic face capture with photos)
 3. **Set Schedules**: Define access rules via web interface
 4. **Run Recognition**: Start the face recognition system
 5. **View Logs**: Check dashboard for all access attempts
+6. **Analyze Data**: View interactive charts showing access trends over the last 7 days
+7. **Export Data**: Export access logs to CSV for external analysis
+8. **Theme Preference**: Toggle between light and dark modes for comfortable viewing
+
+## 📊 Advanced Dashboard Features
+
+### Visual Analytics
+- **Interactive Charts**: Chart.js powered bar charts showing access attempts over the last 7 days
+- **Real-time Data**: Automatically updates with new access attempts
+- **Trend Analysis**: Visualize patterns in employee access behavior
+
+### Data Export
+- **CSV Export**: Export access logs to CSV format for external analysis
+- **Flexible Filtering**: Export by date range or specific employee
+- **Excel Compatible**: Direct import into Excel, Google Sheets, or other tools
+
+### Employee Photos
+- **Automatic Capture**: Employee photos are automatically captured during face data collection
+- **Visual Identification**: See employee photos in the employee list for easy recognition
+- **Fallback Images**: Graceful fallback to placeholder images when photos aren't available
+
+### Dark Mode
+- **Theme Toggle**: Switch between light and dark modes with a single click
+- **Persistent Preferences**: Theme choice is saved to localStorage
+- **Eye Comfort**: Reduces eye strain during extended use in low-light environments
+- **System-wide**: Applies to all pages including modals and forms
+
 
 ## 🔌 API Integration
 
@@ -193,11 +259,11 @@ Face-Recognition-Access-Control-System/
 ├── services.py                     # Service layer (FaceCapture, ModelTrainer, AccessControl)
 ├── requirements.txt                # Python dependencies
 ├── templates/                      # Flask templates
-│   ├── base.html                  # Base template
-│   ├── dashboard.html             # Dashboard page
-│   ├── employees.html             # Employee management
+│   ├── base.html                  # Base template with dark mode support
+│   ├── dashboard.html             # Dashboard with Chart.js analytics
+│   ├── employees.html             # Employee management with photos
 │   ├── access_rules.html          # Access rules management
-│   └── logs.html                  # Attendance logs
+│   └── logs.html                  # Attendance logs with CSV export
 ├── capture_dataset.py             # Legacy: Capture face images (CLI)
 ├── train_model.py                 # Legacy: Train model (CLI)
 ├── recognize_and_control.py       # Main recognition (real hardware)
